@@ -5,7 +5,7 @@ from rest_framework import permissions, viewsets, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.conf import settings
-from django.db.models import Count, Max
+from django.db.models import Case, Count, F, Max, When, IntegerField
 
 from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
@@ -51,16 +51,22 @@ class MenuStatsViewSet(views.APIView):
         if user and not user.is_anonymous:         
             filter_set={}
             if not settings.MENU_PLAN_GLOBAL:
-                filter_set['menu_recipe__author'] = user
+                filter_set['menu_item_author'] = user.id
 
             return Response(
                 Recipe.objects.annotate(
                     num_menuitems=Count('menu_recipe'),
-                    last_made=Max('menu_recipe__complete_date')
+                    last_made=Max('menu_recipe__complete_date'),
+                    complete=Count(Case(
+                        When(menu_recipe__complete=True, then=1),
+                        output_field=IntegerField(),
+                    )),
+                    menu_item_author=F('menu_recipe__author')
                 ).filter(
                     **filter_set,
                     num_menuitems__gte=1,
-                    menu_recipe__complete=True
+                    complete__gte=1
+                ).annotate(
                 ).values(
                     'slug',
                     'title',
